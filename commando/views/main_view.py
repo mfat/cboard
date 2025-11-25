@@ -104,11 +104,17 @@ class MainView(Adw.Bin):
         self.search_entry.set_hexpand(True)
         self.search_entry.connect("search-changed", self._on_search_changed)
         
-        # Wrap search entry in a revealer
+        # Wrap search entry in a revealer for smooth animation
         self.search_revealer = Gtk.Revealer()
         self.search_revealer.set_child(self.search_entry)
         self.search_revealer.set_reveal_child(False)  # Hidden by default
-        self.search_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        # Use CROSSFADE for smoother animation in horizontal toolbar
+        self.search_revealer.set_transition_type(Gtk.RevealerTransitionType.CROSSFADE)
+        # Set transition duration for smooth animation (default is 250ms, but we can make it smoother)
+        self.search_revealer.set_transition_duration(200)  # 200ms for smooth but responsive animation
+        # Don't reserve space when hidden
+        self.search_revealer.set_vexpand(False)
+        self.search_revealer.set_hexpand(True)  # Allow to expand horizontally
         toolbar.append(self.search_revealer)
         
         # Sort combo
