@@ -48,7 +48,7 @@ class MainView(Adw.Bin):
         
         # Flow box for cards
         self.flow_box = Gtk.FlowBox()
-        self.flow_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.flow_box.set_selection_mode(Gtk.SelectionMode.SINGLE)  # Enable selection for keyboard navigation
         self.flow_box.set_homogeneous(False)  # Don't force equal sizes
         self.flow_box.set_max_children_per_line(4)
         self.flow_box.set_min_children_per_line(1)
@@ -60,8 +60,17 @@ class MainView(Adw.Bin):
         self.flow_box.set_margin_bottom(24)
         # Align items to start (top) to prevent stretching
         self.flow_box.set_valign(Gtk.Align.START)
+        # Make FlowBox focusable for keyboard navigation
+        self.flow_box.set_focusable(True)
+        self.flow_box.set_can_focus(True)
         # Prevent FlowBox from expanding children
         self.flow_box.set_activate_on_single_click(False)
+        # Connect to selection changed to handle Enter key
+        self.flow_box.connect("selected-children-changed", self._on_selection_changed)
+        # Add keyboard controller for Enter key
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_key_pressed)
+        self.flow_box.add_controller(key_controller)
         
         self.scrolled.set_child(self.flow_box)
         
@@ -154,6 +163,9 @@ class MainView(Adw.Bin):
             )
             self.flow_box.append(card)
             self.cards[command.number] = card
+        
+        # Select first card and focus FlowBox after commands are loaded
+        GLib.idle_add(self._select_first_card_and_focus)
     
     def _sort_commands(self, commands: list[Command]):
         """Sort commands based on current sort setting."""
@@ -291,6 +303,128 @@ class MainView(Adw.Bin):
         
         # Adw.Dialog uses close() instead of destroy()
         dialog.close()
+    
+    def _select_first_card_and_focus(self):
+        """Select the first card and focus the FlowBox."""
+        first_child = self.flow_box.get_first_child()
+        if first_child:
+            self.flow_box.select_child(first_child)
+            # Focus the FlowBox
+            if self.flow_box.get_visible() and self.flow_box.get_can_focus():
+                self.flow_box.grab_focus()
+                logger.debug("First card selected and FlowBox focused")
+            else:
+                # Retry if not ready
+                GLib.timeout_add(50, self._select_first_card_and_focus)
+                return True  # Repeat
+        return False  # Don't repeat
+    
+    def _on_selection_changed(self, flow_box):
+        """Handle selection change in flow box."""
+        # This is called when selection changes, but we don't need to do anything here
+        # The Enter key handler will execute the selected command
+        pass
+    
+    def _on_key_pressed(self, controller, keyval, keycode, state):
+        """Handle keyboard input on flow box."""
+        from gi.repository import Gdk
+        
+        # Check if Enter or Return key was pressed
+        if keyval == Gdk.KEY_Return or keyval == Gdk.KEY_KP_Enter:
+            selected = self.flow_box.get_selected_children()
+            if selected:
+                # Get the first selected child
+                child = selected[0]
+                # Get the card widget from the child
+                card = child.get_child()
+                if isinstance(card, CommandCard):
+                    logger.info(f"Executing command from Enter key: {card.command.title}")
+                    self.execute_command(card.command)
+                return True  # Event handled
+        
+        # Handle arrow key navigation
+        elif keyval in (Gdk.KEY_Up, Gdk.KEY_Down, Gdk.KEY_Left, Gdk.KEY_Right, 
+                        Gdk.KEY_KP_Up, Gdk.KEY_KP_Down, Gdk.KEY_KP_Left, Gdk.KEY_KP_Right):
+            return self._handle_arrow_key(keyval)
+        
+        return False  # Event not handled
+    
+    def _handle_arrow_key(self, keyval):
+        """Handle arrow key navigation."""
+        from gi.repository import Gdk
+        
+        selected = self.flow_box.get_selected_children()
+        current_child = selected[0] if selected else None
+        
+        if not current_child:
+            # No selection, select first child
+            first_child = self.flow_box.get_first_child()
+            if first_child:
+                self.flow_box.select_child(first_child)
+                self._scroll_to_child(first_child)
+            return True
+        
+        # Get current index
+        current_index = current_child.get_index()
+        max_children_per_line = self.flow_box.get_max_children_per_line()
+        
+        # Count total children by iterating
+        total_children = 0
+        child = self.flow_box.get_first_child()
+        while child is not None:
+            total_children += 1
+            child = child.get_next_sibling()
+        
+        # Determine next index based on arrow key
+        if keyval in (Gdk.KEY_Right, Gdk.KEY_KP_Right):
+            # Move right (next card)
+            next_index = current_index + 1
+            if next_index < total_children:
+                next_child = self.flow_box.get_child_at_index(next_index)
+                if next_child:
+                    self.flow_box.select_child(next_child)
+                    self._scroll_to_child(next_child)
+                    return True
+        
+        elif keyval in (Gdk.KEY_Left, Gdk.KEY_KP_Left):
+            # Move left (previous card)
+            next_index = current_index - 1
+            if next_index >= 0:
+                next_child = self.flow_box.get_child_at_index(next_index)
+                if next_child:
+                    self.flow_box.select_child(next_child)
+                    self._scroll_to_child(next_child)
+                    return True
+        
+        elif keyval in (Gdk.KEY_Down, Gdk.KEY_KP_Down):
+            # Move down (next row)
+            next_index = current_index + max_children_per_line
+            if next_index < total_children:
+                next_child = self.flow_box.get_child_at_index(next_index)
+                if next_child:
+                    self.flow_box.select_child(next_child)
+                    self._scroll_to_child(next_child)
+                    return True
+        
+        elif keyval in (Gdk.KEY_Up, Gdk.KEY_KP_Up):
+            # Move up (previous row)
+            next_index = current_index - max_children_per_line
+            if next_index >= 0:
+                next_child = self.flow_box.get_child_at_index(next_index)
+                if next_child:
+                    self.flow_box.select_child(next_child)
+                    self._scroll_to_child(next_child)
+                    return True
+        
+        return True  # Event handled (even if no movement)
+    
+    def _scroll_to_child(self, child):
+        """Scroll the scrolled window to make the child visible."""
+        # Get the allocation of the child
+        allocation = child.get_allocation()
+        if allocation.height > 0:
+            # Scroll to make the child visible
+            self.scrolled.get_vadjustment().set_value(allocation.y)
     
     def cleanup(self):
         """Clean up resources."""

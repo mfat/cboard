@@ -163,6 +163,20 @@ class CommandoWindow(Adw.ApplicationWindow):
         self.stack.set_vexpand(True)
         self.stack.set_hexpand(True)
         self.main_box.append(self.stack)
+        
+        # Connect to stack's visible-child-changed signal to focus FlowBox when main view is shown
+        self.stack.connect("notify::visible-child", self._on_stack_visible_child_changed)
+        
+        # Connect to window's realize and visible signals to focus FlowBox when window is first shown
+        self.connect("realize", self._on_window_realize)
+        self.connect("notify::visible", self._on_window_visible_changed)
+        
+        # Connect to stack's visible-child-changed signal to focus FlowBox when main view is shown
+        self.stack.connect("notify::visible-child", self._on_stack_visible_child_changed)
+        
+        # Connect to window's realize and visible signals to focus FlowBox when window is first shown
+        self.connect("realize", self._on_window_realize)
+        self.connect("notify::visible", self._on_window_visible_changed)
     
     def _apply_theme(self):
         """Apply the current theme."""
@@ -258,6 +272,45 @@ class CommandoWindow(Adw.ApplicationWindow):
     def _on_home_clicked(self, button):
         """Handle home button click - switch to main view."""
         self.stack.set_visible_child_name("main")
+    
+    def _on_window_realize(self, window):
+        """Handle window realization - focus FlowBox when window is first shown."""
+        # When window is realized, focus the FlowBox if main view is visible
+        if self.stack.get_visible_child() == self.main_view:
+            if hasattr(self.main_view, 'flow_box'):
+                # Use a small timeout to ensure everything is ready
+                GLib.timeout_add(150, self._focus_flowbox)
+    
+    def _on_window_visible_changed(self, window, param):
+        """Handle window visibility change - focus FlowBox when window becomes visible."""
+        if window.get_visible() and self.stack.get_visible_child() == self.main_view:
+            if hasattr(self.main_view, 'flow_box'):
+                # Use a small timeout to ensure everything is ready
+                GLib.timeout_add(150, self._focus_flowbox)
+    
+    def _focus_flowbox(self):
+        """Focus the FlowBox."""
+        if hasattr(self.main_view, 'flow_box'):
+            flow_box = self.main_view.flow_box
+            # Make sure FlowBox is visible and can receive focus
+            if flow_box.get_visible() and flow_box.get_can_focus():
+                flow_box.grab_focus()
+                logger.debug("FlowBox focused")
+                return False  # Don't repeat
+            else:
+                # Try again after a short delay if not ready yet
+                GLib.timeout_add(50, self._focus_flowbox)
+                return True  # Repeat
+        return False  # Don't repeat
+    
+    def _on_stack_visible_child_changed(self, stack, param):
+        """Handle stack visible child change - focus FlowBox when main view is shown."""
+        visible_child = stack.get_visible_child()
+        if visible_child == self.main_view:
+            # Main view is now visible, focus the FlowBox
+            if hasattr(self.main_view, 'flow_box'):
+                # Use a small delay to ensure the view is fully visible
+                GLib.timeout_add(50, self._focus_flowbox)
     
     def _on_settings(self, action, param):
         """Open settings dialog."""
