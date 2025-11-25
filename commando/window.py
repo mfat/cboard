@@ -85,8 +85,14 @@ class CommandoWindow(Adw.ApplicationWindow):
         self.stack.add_titled(self.terminal_view, "terminal", "Terminal")
         self.stack.add_titled(self.web_view, "web", "Web")
         
+        # Set main view as default
+        self.stack.set_visible_child_name("main")
+        
         # Update speed dial with main_view reference
         self.speed_dial.main_view = self.main_view
+        
+        # Update home button icon to reflect initial state
+        self._update_home_button_icon()
         
         # Connect menu actions
         self._setup_menu_actions()
@@ -107,11 +113,11 @@ class CommandoWindow(Adw.ApplicationWindow):
         self.header = header
         
         # Home button (to go back to main view)
-        home_button = Gtk.Button()
-        home_button.set_icon_name("go-home-symbolic")
-        home_button.set_tooltip_text("Go to Commands")
-        home_button.connect("clicked", self._on_home_clicked)
-        header.pack_start(home_button)
+        self.home_button = Gtk.Button()
+        self.home_button.set_icon_name("terminal-symbolic")
+        self.home_button.set_tooltip_text("Go to Terminal")
+        self.home_button.connect("clicked", self._on_home_clicked)
+        header.pack_start(self.home_button)
         
         # Menu button
         menu = Gtk.MenuButton()
@@ -302,46 +308,78 @@ class CommandoWindow(Adw.ApplicationWindow):
                 GLib.idle_add(self.main_view.search_entry.grab_focus)
     
     def _on_home_clicked(self, button):
-        """Handle home button click - switch to main view."""
-        # First, remove focus from terminal view if it has focus
-        if hasattr(self, 'terminal_view') and self.terminal_view.has_focus():
-            # Remove focus from terminal by focusing the window itself temporarily
-            self.grab_focus()
-            logger.debug("Removed focus from terminal view")
+        """Handle home button click - toggle between main view and terminal view."""
+        current_view = self.stack.get_visible_child_name()
         
-        self.stack.set_visible_child_name("main")
-        # The _on_stack_visible_child_changed handler will focus MainView
-        # But we also ensure focus here with multiple retries
-        def focus_main_view():
-            if hasattr(self.main_view, 'flow_box'):
-                # Ensure MainView is visible and realized
-                if not self.main_view.get_visible() or not self.main_view.get_realized():
-                    logger.debug("MainView not ready yet, will retry")
-                    return True  # Retry
-                
-                # Ensure a card is selected
-                selected = self.main_view.flow_box.get_selected_children()
-                if not selected:
-                    first_child = self.main_view.flow_box.get_first_child()
-                    if first_child:
-                        self.main_view.flow_box.select_child(first_child)
-                        logger.debug("Selected first card after home button")
-                
-                # Focus MainView so it can receive keyboard events
-                self.main_view.grab_focus()
-                has_focus = self.main_view.has_focus()
-                logger.debug(f"MainView focused after home button: has_focus={has_focus}")
-                
-                if not has_focus:
-                    # Retry if focus failed
-                    return True
-                return False  # Success, don't retry
-            return False
+        if current_view == "main":
+            # Switch to terminal view
+            self.stack.set_visible_child_name("terminal")
+            # Focus terminal after switching
+            def focus_terminal():
+                if hasattr(self.terminal_view, 'focus_current_terminal'):
+                    self.terminal_view.focus_current_terminal()
+                    return False
+                return False
+            GLib.timeout_add(100, focus_terminal)
+        else:
+            # Switch to main view
+            # First, remove focus from terminal view if it has focus
+            if hasattr(self, 'terminal_view') and self.terminal_view.has_focus():
+                # Remove focus from terminal by focusing the window itself temporarily
+                self.grab_focus()
+                logger.debug("Removed focus from terminal view")
+            
+            self.stack.set_visible_child_name("main")
+            # The _on_stack_visible_child_changed handler will focus MainView
+            # But we also ensure focus here with multiple retries
+            def focus_main_view():
+                if hasattr(self.main_view, 'flow_box'):
+                    # Ensure MainView is visible and realized
+                    if not self.main_view.get_visible() or not self.main_view.get_realized():
+                        logger.debug("MainView not ready yet, will retry")
+                        return True  # Retry
+                    
+                    # Ensure a card is selected
+                    selected = self.main_view.flow_box.get_selected_children()
+                    if not selected:
+                        first_child = self.main_view.flow_box.get_first_child()
+                        if first_child:
+                            self.main_view.flow_box.select_child(first_child)
+                            logger.debug("Selected first card after home button")
+                    
+                    # Focus MainView so it can receive keyboard events
+                    self.main_view.grab_focus()
+                    has_focus = self.main_view.has_focus()
+                    logger.debug(f"MainView focused after home button: has_focus={has_focus}")
+                    
+                    if not has_focus:
+                        # Retry if focus failed
+                        return True
+                    return False  # Success, don't retry
+                return False
+            
+            # Use multiple timeouts with increasing delays
+            GLib.timeout_add(100, focus_main_view)
+            GLib.timeout_add(200, focus_main_view)
+            GLib.timeout_add(400, focus_main_view)
         
-        # Use multiple timeouts with increasing delays
-        GLib.timeout_add(100, focus_main_view)
-        GLib.timeout_add(200, focus_main_view)
-        GLib.timeout_add(400, focus_main_view)
+        # Update home button icon after view change
+        self._update_home_button_icon()
+    
+    def _update_home_button_icon(self):
+        """Update home button icon and tooltip based on current view."""
+        if not hasattr(self, 'home_button') or not hasattr(self, 'stack'):
+            return
+        
+        current_view = self.stack.get_visible_child_name()
+        if current_view == "main":
+            # Show terminal icon when in main view (clicking will go to terminal)
+            self.home_button.set_icon_name("terminal-symbolic")
+            self.home_button.set_tooltip_text("Go to Terminal")
+        else:
+            # Show home icon when in terminal view (clicking will go to main view)
+            self.home_button.set_icon_name("go-home-symbolic")
+            self.home_button.set_tooltip_text("Go to Commands")
     
     def _on_window_realize(self, window):
         """Handle window realization - focus MainView when window is first shown."""
@@ -443,6 +481,9 @@ class CommandoWindow(Adw.ApplicationWindow):
     
     def _on_stack_visible_child_changed(self, stack, param):
         """Handle stack visible child change - focus MainView when main view is shown."""
+        # Update home button icon when view changes
+        self._update_home_button_icon()
+        
         visible_child = stack.get_visible_child()
         if visible_child == self.main_view:
             # Main view is now visible, remove focus from terminal if it has it
