@@ -264,6 +264,13 @@ class CommandoWindow(Adw.ApplicationWindow):
         )
         shortcut_controller.add_shortcut(shortcut)
         
+        # Ctrl+Shift+E to toggle between main view and terminal view
+        shortcut = Gtk.Shortcut.new(
+            Gtk.ShortcutTrigger.parse_string("<Primary><Shift>e"),
+            Gtk.CallbackAction.new(lambda *args: self._on_home_clicked(self.home_button))
+        )
+        shortcut_controller.add_shortcut(shortcut)
+        
         self.add_controller(shortcut_controller)
         
         # Add a window-level keyboard controller for arrow keys and Enter
