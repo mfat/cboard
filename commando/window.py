@@ -327,22 +327,6 @@ class CommandoWindow(Adw.ApplicationWindow):
         if hasattr(self.main_view, 'search_entry') and self.main_view.search_entry.has_focus():
             return False
         
-        # Check if it's a number key - forward to MainView immediately
-        number_keys = (
-            Gdk.KEY_0, Gdk.KEY_1, Gdk.KEY_2, Gdk.KEY_3, Gdk.KEY_4,
-            Gdk.KEY_5, Gdk.KEY_6, Gdk.KEY_7, Gdk.KEY_8, Gdk.KEY_9,
-            Gdk.KEY_KP_0, Gdk.KEY_KP_1, Gdk.KEY_KP_2, Gdk.KEY_KP_3, Gdk.KEY_KP_4,
-            Gdk.KEY_KP_5, Gdk.KEY_KP_6, Gdk.KEY_KP_7, Gdk.KEY_KP_8, Gdk.KEY_KP_9
-        )
-        if keyval in number_keys:
-            # Forward number keys to MainView's handler
-            if hasattr(self.main_view, '_on_key_pressed'):
-                result = self.main_view._on_key_pressed(controller, keyval, keycode, state)
-                if result:
-                    return True
-            # If MainView can't handle it, don't consume it - let it pass through
-            return False
-        
         # Only handle arrow keys and Enter to prevent error tones
         # Forward to MainView's handler if it can handle it
         is_arrow = keyval in (Gdk.KEY_Up, Gdk.KEY_Down, Gdk.KEY_Left, Gdk.KEY_Right,
@@ -358,7 +342,8 @@ class CommandoWindow(Adw.ApplicationWindow):
             # If MainView can't handle it, consume it anyway to prevent error tone
             return True
         
-        # For other keys, don't consume them - let them pass through or be handled normally
+        # For all other keys (including number keys), don't consume them
+        # Let them pass through to MainView's controller which uses CAPTURE phase
         return False
     
     # Removed _on_window_key_pressed - MainView's keyboard controller handles all keyboard events

@@ -414,7 +414,7 @@ class MainView(Adw.Bin):
         from gi.repository import Gdk
         
         # Log ALL key presses at the very start to debug
-        logger.debug(f"_on_key_pressed START: keyval={keyval}, flow_box_visible={self.flow_box.get_visible()}, cards_count={len(self.cards)}")
+        logger.debug(f"MainView._on_key_pressed START: keyval={keyval}, flow_box_visible={self.flow_box.get_visible()}, cards_count={len(self.cards)}, main_view_has_focus={self.has_focus()}")
         
         # Only handle keys when main view is visible and has cards
         if not self.flow_box.get_visible() or len(self.cards) == 0:
